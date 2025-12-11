@@ -1,0 +1,37 @@
+# Зависимости
+node_modules
+npm-debug.log
+
+# Переменные окружения
+.env
+
+# Git
+.git
+.gitignore
+
+# Документация
+README.md
+*.md
+
+# Docker файлы
+Dockerfile
+.dockerignore
+
+# Логи
+*.log
+logs/
+
+# Тестирование
+coverage/
+.nyc_output
+
+# Временные файлы
+.cache
+.tmp
+.temp
+
+# Скрипты развертывания
+deploy-*.sh
+
+# Экспорт данных
+src/data/export.json
