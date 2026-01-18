@@ -38,7 +38,7 @@ function hashPassword(password) {
 function generateToken(user) {
   return jwt.sign(
     { id: user.id, username: user.username, role: user.role },
-    process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+    process.env.JWT_SECRET,
     { expiresIn: '24h' }
   );
 }
@@ -151,7 +151,7 @@ router.get('/me', async (req, res) => {
 
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+      process.env.JWT_SECRET
     );
 
     const db = await initDb();
@@ -239,7 +239,7 @@ router.post('/change-password', async (req, res) => {
     try {
       decoded = jwt.verify(
         token,
-        process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+        process.env.JWT_SECRET
       );
     } catch (error) {
       return res.status(401).json({

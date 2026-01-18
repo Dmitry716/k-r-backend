@@ -62,13 +62,7 @@ const limiter = rateLimit({
 app.use('/api', limiter);
 
 // CORS configuration
-const allowedOrigins = [
-  process.env.FRONTEND_URL || 'http://localhost:3000',
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'https://k-r.by',
-  'https://www.k-r.by'
-];
+const allowedOrigins = process.env.ORIGIN_URLS.split(',');
 
 app.use(cors({
   origin: (origin, callback) => {

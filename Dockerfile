@@ -1,5 +1,5 @@
 # Backend Dockerfile для Stonerose API
-FROM node:18-alpine
+FROM node:22-alpine
 
 # Устанавливаем curl для health checks
 RUN apk add --no-cache curl
@@ -14,7 +14,8 @@ RUN adduser -S nodejs -u 1001
 COPY package*.json ./
 
 # Устанавливаем зависимости
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --only=production
+# && npm cache clean --force
 
 # Копируем исходный код
 COPY src/ ./src/
