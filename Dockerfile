@@ -19,7 +19,7 @@ RUN npm ci --only=production
 
 # Копируем исходный код
 COPY src/ ./src/
-COPY .env.production ./.env
+COPY .env ./.env
 
 # Создаем папки
 RUN mkdir -p uploads logs && \
