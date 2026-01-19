@@ -27,7 +27,7 @@ router.get('/images', (req, res) => {
     }
 
     // Путь к public папке frontend проекта (на сервере будет /var/www/stonerose-frontend/public)
-    const publicPath = process.env.FRONTEND_PUBLIC_PATH + folder;
+    const publicPath = path.join(process.env.FRONTEND_PUBLIC_PATH, folder);
     
     let files = [];
     

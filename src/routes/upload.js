@@ -44,7 +44,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     }
 
     // Путь для сохранения - в public папку фронтенда
-    const publicPath = path.join('/var/www/stonerose-frontend/public', folder);
+    const publicPath = path.join(process.env.FRONTEND_PUBLIC_PATH, folder);
     
     // Создаем папку если её нет
     try {
