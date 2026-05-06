@@ -14,6 +14,7 @@ let reviewsCache = null;
 let cacheTimestamp = null;
 const CACHE_DURATION = 3600000; // 1 час в миллисекундах
 const ENABLE_REVIEW_SCRAPING = process.env.ENABLE_REVIEW_SCRAPING === 'true';
+const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY || '';
 let refreshInFlight = null;
 const DEFAULT_CHROMIUM_PATHS = ['/usr/bin/chromium-browser', '/usr/bin/chromium'];
 
@@ -350,6 +351,55 @@ async function fetchGoogleReviews() {
   }
 }
 
+async function fetchGoogleReviewsFromApi() {
+  if (!GOOGLE_PLACES_API_KEY) {
+    return [];
+  }
+
+  try {
+    const url = new URL('https://maps.googleapis.com/maps/api/place/details/json');
+    url.searchParams.set('place_id', GOOGLE_PLACE_ID);
+    url.searchParams.set('fields', 'reviews');
+    url.searchParams.set('language', 'ru');
+    url.searchParams.set('key', GOOGLE_PLACES_API_KEY);
+
+    const response = await fetch(url.toString(), {
+      headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) {
+      throw new Error(`google_api_http_${response.status}`);
+    }
+
+    const payload = await response.json();
+    const reviews = payload?.result?.reviews;
+    if (!Array.isArray(reviews)) {
+      return [];
+    }
+
+    return reviews
+      .filter((review) => review && review.text)
+      .map((review, index) => {
+        const epochSeconds = Number(review.time);
+        const isoDate = Number.isFinite(epochSeconds)
+          ? new Date(epochSeconds * 1000).toISOString()
+          : new Date().toISOString();
+        return {
+          id: `google-api-${review.author_name || 'user'}-${index}`,
+          name: review.author_name || 'Клиент Google',
+          date: isoDate,
+          rating: Number(review.rating) || 5,
+          text: review.text || '',
+          source: 'Google Maps',
+          avatar: review.profile_photo_url || null,
+          photos: []
+        };
+      });
+  } catch (error) {
+    console.error('Error fetching Google reviews via API:', error.message || error);
+    return [];
+  }
+}
+
 /**
  * Получение отзывов с Яндекс.Карт через Puppeteer
  */
@@ -533,14 +583,23 @@ async function refreshReviewsCache() {
         new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout_${ms}ms`)), ms))
       ]);
 
+    const googleProvider = GOOGLE_PLACES_API_KEY ? fetchGoogleReviewsFromApi() : fetchGoogleReviews();
     const [googleReviews, yandexReviews] = await Promise.allSettled([
-      withTimeout(fetchGoogleReviews(), 15000),
+      withTimeout(googleProvider, 15000),
       withTimeout(fetchYandexReviews(), 15000)
     ]);
 
     const normalizedGoogle = googleReviews.status === 'fulfilled' ? googleReviews.value : [];
     const normalizedYandex = yandexReviews.status === 'fulfilled' ? yandexReviews.value : [];
-    const scrapedReviews = [...normalizedGoogle, ...normalizedYandex];
+    const seenReviewKeys = new Set();
+    const scrapedReviews = [...normalizedGoogle, ...normalizedYandex].filter((review) => {
+      const key = `${review.name || ''}|${review.text || ''}`.trim().toLowerCase();
+      if (!key || seenReviewKeys.has(key)) {
+        return false;
+      }
+      seenReviewKeys.add(key);
+      return true;
+    });
 
     if (scrapedReviews.length > 0) {
       reviewsCache = scrapedReviews;
