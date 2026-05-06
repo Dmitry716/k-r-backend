@@ -1,0 +1,58 @@
+name: Site Files Backup
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup-site-files:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - name: Backup site files via SSH
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_KEY }}
+          script: |
+            set -euo pipefail
+
+            backup_dir="/home/user/backups/site"
+            mkdir -p "${backup_dir}"
+
+            timestamp="$(date +%F_%H-%M-%S)"
+            backup_file="${backup_dir}/site_${timestamp}.tar.gz"
+
+            sources=(
+              "/home/user/frontend"
+              "/home/user/backend"
+            )
+
+            existing_sources=()
+            for source in "${sources[@]}"; do
+              if [ -d "${source}" ]; then
+                existing_sources+=("${source}")
+              fi
+            done
+
+            if [ "${#existing_sources[@]}" -eq 0 ]; then
+              echo "No source directories found for site backup."
+              exit 1
+            fi
+
+            tar \
+              --exclude='*/node_modules' \
+              --exclude='*/.git' \
+              --exclude='*/.next/cache' \
+              --exclude='*/backups' \
+              -czf "${backup_file}" \
+              "${existing_sources[@]}"
+
+            # Keep 14 days of file backups
+            find "${backup_dir}" -type f -name "site_*.tar.gz" -mtime +14 -delete
+
+            ls -lh "${backup_dir}" | tail -n 10
