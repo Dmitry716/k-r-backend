@@ -9,6 +9,8 @@ jobs:
   backup-postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - name: Backup PostgreSQL via SSH
         uses: appleboy/ssh-action@v0.1.6
