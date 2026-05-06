@@ -5,6 +5,46 @@ const { eq, and } = require('drizzle-orm');
 
 const router = express.Router();
 
+function tryFixMojibake(value) {
+  if (typeof value !== 'string' || (!value.includes('Ð') && !value.includes('Ñ'))) {
+    return value;
+  }
+
+  try {
+    const repaired = Buffer.from(value, 'latin1').toString('utf8');
+    // If conversion produced readable cyrillic, use it.
+    if (/[А-Яа-яЁё]/.test(repaired)) {
+      return repaired;
+    }
+  } catch (error) {
+    // Ignore conversion errors and keep original value.
+  }
+
+  return value;
+}
+
+function normalizeWorkImage(workItem) {
+  if (!workItem || typeof workItem !== 'object') return workItem;
+  if (!workItem.image || typeof workItem.image !== 'string') return workItem;
+
+  const image = workItem.image;
+  const marker = '/api/static/';
+  const markerIndex = image.indexOf(marker);
+  if (markerIndex === -1) return workItem;
+
+  const prefix = image.slice(0, markerIndex + marker.length);
+  const pathPart = image.slice(markerIndex + marker.length);
+  const fixedPathPart = pathPart
+    .split('/')
+    .map((segment) => tryFixMojibake(segment))
+    .join('/');
+
+  return {
+    ...workItem,
+    image: `${prefix}${fixedPathPart}`,
+  };
+}
+
 // GET /api/works - получить все работы или отфильтрованные
 router.get('/', async (req, res) => {
   try {
@@ -21,7 +61,7 @@ router.get('/', async (req, res) => {
               eq(works.category, category)
             )
           );
-        return res.json({ success: true, data: productWorks });
+        return res.json({ success: true, data: productWorks.map(normalizeWorkImage) });
       } catch (error) {
         return res.json({ success: true, data: [] });
       }
@@ -37,7 +77,7 @@ router.get('/', async (req, res) => {
               eq(works.productType, productType)
             )
           );
-        return res.json({ success: true, data: productWorks });
+        return res.json({ success: true, data: productWorks.map(normalizeWorkImage) });
       } catch (error) {
         return res.json({ success: true, data: [] });
       }
@@ -48,7 +88,7 @@ router.get('/', async (req, res) => {
       try {
         const filteredWorks = await db.select().from(works)
           .where(eq(works.category, category));
-        return res.json({ success: true, data: filteredWorks });
+        return res.json({ success: true, data: filteredWorks.map(normalizeWorkImage) });
       } catch (error) {
         return res.json({ success: true, data: [] });
       }
@@ -58,7 +98,7 @@ router.get('/', async (req, res) => {
     try {
       const allWorks = await db.select().from(works)
         .orderBy(works.createdAt);
-      res.json({ success: true, data: allWorks });
+      res.json({ success: true, data: allWorks.map(normalizeWorkImage) });
     } catch (error) {
       // Если таблица не существует, возвращаем пустой массив
       res.json({ success: true, data: [] });
