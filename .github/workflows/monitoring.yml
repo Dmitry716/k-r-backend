@@ -56,7 +56,7 @@ jobs:
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
 
       - name: Send Telegram alert
-        if: steps.checks.outputs.failed == 'true' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        if: steps.checks.outputs.failed == 'true'
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -68,6 +68,10 @@ jobs:
           REASON: ${{ steps.checks.outputs.reason }}
         run: |
           set -euo pipefail
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+            echo "Telegram secrets are not configured, skipping alert delivery."
+            exit 0
+          fi
           msg="🚨 k-r.by monitoring alert%0A"
           msg="${msg}Site: ${SITE_CODE}%0A"
           msg="${msg}API health: ${API_HEALTH_CODE}%0A"
