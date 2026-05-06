@@ -151,3 +151,78 @@ Backend deploy workflow should include:
 - smoke check to `http://localhost:3001/api/health`
 - `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` in job `env`
 
+---
+
+## 9) Incident pattern: "works images are broken/404"
+
+Symptoms:
+- `/works` page shows broken image icons.
+- `GET /api/works` returns records, but image URLs return `404`.
+
+Quick triage:
+```bash
+curl -I "http://localhost:3001/api/static/works/%D0%A1-77.jpg"
+docker compose exec -T backend sh -lc 'echo "$FRONTEND_PUBLIC_PATH"; ls -lah "$FRONTEND_PUBLIC_PATH/works" | head -n 10'
+ls -lah /home/user/frontend/public/works | head -n 10
+```
+
+Expected:
+- backend serves `200` for known file.
+- backend container can read `$FRONTEND_PUBLIC_PATH/works`.
+
+Root causes seen in production:
+- wrong `FRONTEND_PUBLIC_PATH` in `/home/user/backend/.env`
+- missing bind mount for frontend public files in backend compose
+- mojibake filenames (`Ð...`/`Ñ...`) in `/home/user/frontend/public/works`
+
+Required backend compose mount:
+```yaml
+services:
+  backend:
+    volumes:
+      - /home/user/frontend/public:/home/user/frontend/public:ro
+```
+
+Mojibake repair (run on VPS):
+```bash
+sudo python3 - <<'PY'
+from pathlib import Path
+p = Path("/home/user/frontend/public/works")
+for f in list(p.iterdir()):
+    if not f.is_file():
+        continue
+    name = f.name
+    if "Ð" not in name and "Ñ" not in name:
+        continue
+    fixed = name.encode("latin1").decode("utf-8")
+    target = f.with_name(fixed)
+    if not target.exists():
+        f.rename(target)
+PY
+```
+
+Mass validation (all works images):
+```bash
+python3 - <<'PY'
+import json, urllib.request, urllib.parse, urllib.error
+with urllib.request.urlopen("http://localhost:3001/api/works", timeout=20) as r:
+    works = json.load(r).get("data", [])
+ok, bad = 0, 0
+for w in works:
+    raw = w.get("image", "")
+    path = raw.split("/api/static/", 1)[-1]
+    url = "http://localhost:3001/api/static/" + urllib.parse.quote(path, safe="/._-")
+    try:
+        code = urllib.request.urlopen(urllib.request.Request(url, method="HEAD"), timeout=10).getcode()
+    except urllib.error.HTTPError as e:
+        code = e.code
+    except Exception:
+        code = 0
+    if code == 200:
+        ok += 1
+    else:
+        bad += 1
+print(f"TOTAL={len(works)} OK={ok} BAD={bad}")
+PY
+```
+
