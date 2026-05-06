@@ -19,6 +19,9 @@ const filesRoutes = require('./routes/files');
 const uploadRoutes = require('./routes/upload');
 const authRoutes = require('./routes/auth');
 const reviewsRoutes = require('./routes/reviews');
+const consentLeadsRoutes = require('./routes/consent-leads');
+const adminPdRoutes = require('./routes/admin-pd');
+const { startConsentRetentionScheduler } = require('./jobs/consent-retention');
 
 // Admin routes
 const adminMonumentsRoutes = require('./routes/admin-monuments');
@@ -106,6 +109,8 @@ app.use('/api/page-descriptions', pageDescriptionsRoutes);
 app.use('/api/page-seo', pageSeoRoutes);
 app.use('/api/reviews', reviewsRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/consent-leads', consentLeadsRoutes);
+app.use('/api/admin/pd', adminPdRoutes);
 
 // Admin API Routes
 app.use('/api/admin/monuments', adminMonumentsRoutes);
@@ -130,10 +135,13 @@ app.use('/api/seo-hierarchy', seoHierarchyRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api', adminFilesRoutes);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+function healthHandler(req, res) {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
+}
+
+// Health check endpoints
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -152,6 +160,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
+  startConsentRetentionScheduler();
   if (process.env.NODE_ENV !== 'production') {
     console.log(`🚀 Backend server running on port ${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
