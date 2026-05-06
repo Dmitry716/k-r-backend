@@ -545,12 +545,9 @@ async function refreshReviewsCache() {
     if (scrapedReviews.length > 0) {
       reviewsCache = scrapedReviews;
       cacheTimestamp = now;
-    } else if (!reviewsCache) {
-      reviewsCache = [];
-      cacheTimestamp = now;
     }
 
-    return reviewsCache || [];
+    return Array.isArray(reviewsCache) ? reviewsCache : [];
   })()
     .catch((error) => {
       console.error('Background reviews refresh failed:', error);
@@ -568,7 +565,8 @@ router.get('/', async (req, res) => {
   try {
     const now = Date.now();
     const hasFreshCache = Boolean(reviewsCache && cacheTimestamp && (now - cacheTimestamp < CACHE_DURATION));
-    const effectiveReviews = reviewsCache || FALLBACK_REVIEWS;
+    const hasCachedReviews = Array.isArray(reviewsCache) && reviewsCache.length > 0;
+    const effectiveReviews = hasCachedReviews ? reviewsCache : FALLBACK_REVIEWS;
 
     if (!hasFreshCache && ENABLE_REVIEW_SCRAPING) {
       refreshReviewsCache().catch((error) => {
@@ -580,7 +578,7 @@ router.get('/', async (req, res) => {
       success: true,
       data: effectiveReviews,
       total: effectiveReviews.length,
-      cached: Boolean(reviewsCache),
+      cached: hasCachedReviews,
       stale: !hasFreshCache,
       source: ENABLE_REVIEW_SCRAPING ? 'cache_or_fallback' : 'fallback'
     });
