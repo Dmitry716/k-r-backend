@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { config } from 'dotenv';
-import XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import fs from 'fs';
 import { singleMonuments, doubleMonuments, compositeMonuments } from '../src/models/schema.js';
 
@@ -33,6 +33,44 @@ if (!connectionString) {
 
 const client = postgres(connectionString);
 const db = drizzle(client);
+
+function normalizeCellValue(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object' && value?.result !== undefined) {
+    return String(value.result ?? '').trim();
+  }
+  return String(value).trim();
+}
+
+function worksheetToJsonRows(worksheet) {
+  const headerRow = worksheet.getRow(1);
+  const headers = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber] = normalizeCellValue(cell.value);
+  });
+
+  const rows = [];
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+
+    const result = {};
+    let hasData = false;
+
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      const header = headers[colNumber];
+      if (!header) return;
+      const value = normalizeCellValue(cell.value);
+      if (value !== '') hasData = true;
+      result[header] = value;
+    });
+
+    if (hasData) {
+      rows.push(result);
+    }
+  });
+
+  return rows;
+}
 
 // Конфигурация типов памятников
 const MONUMENT_TYPES = {
@@ -243,30 +281,36 @@ async function importMonuments(monumentType, filePath) {
     }
     
     // Читаем Excel файл
-    const workbook = XLSX.readFile(filePath);
-    console.log(`📊 Найдено листов в файле: ${workbook.SheetNames.length}`);
-    console.log(`📋 Листы: ${workbook.SheetNames.join(', ')}\n`);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+    const sheetNames = workbook.worksheets.map((sheet) => sheet.name);
+    console.log(`📊 Найдено листов в файле: ${sheetNames.length}`);
+    console.log(`📋 Листы: ${sheetNames.join(', ')}\n`);
     
     // Определяем лист для чтения
     let sheetName = config.sheetName;
     
     if (!sheetName) {
       // Для составных используем первый лист
-      sheetName = workbook.SheetNames[0];
+      sheetName = sheetNames[0];
       console.log(`📄 Используем лист: "${sheetName}"`);
     } else {
       // Проверяем наличие листа
-      if (!workbook.SheetNames.includes(sheetName)) {
+      if (!sheetNames.includes(sheetName)) {
         console.error(`❌ Лист "${sheetName}" не найден в файле`);
-        console.error(`Доступные листы: ${workbook.SheetNames.join(', ')}`);
+        console.error(`Доступные листы: ${sheetNames.join(', ')}`);
         process.exit(1);
       }
       console.log(`📄 Обрабатываем лист: "${sheetName}"`);
     }
     
     // Читаем данные из листа
-    const worksheet = workbook.Sheets[sheetName];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+    const worksheet = workbook.getWorksheet(sheetName);
+    if (!worksheet) {
+      console.error(`❌ Лист "${sheetName}" не найден в файле`);
+      process.exit(1);
+    }
+    const jsonData = worksheetToJsonRows(worksheet);
     
     console.log(`📊 Найдено строк данных: ${jsonData.length}\n`);
     

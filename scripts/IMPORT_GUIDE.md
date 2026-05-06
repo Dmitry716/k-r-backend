@@ -7,7 +7,7 @@
 В backend папке должны быть установлены зависимости:
 ```bash
 cd backend
-npm install drizzle-orm postgres xlsx dotenv
+npm install drizzle-orm postgres exceljs dotenv
 ```
 
 ## Использование
