@@ -13,6 +13,7 @@ let reviewsCache = null;
 let cacheTimestamp = null;
 const CACHE_DURATION = 3600000; // 1 час в миллисекундах
 const ENABLE_REVIEW_SCRAPING = process.env.ENABLE_REVIEW_SCRAPING === 'true';
+let refreshInFlight = null;
 
 const FALLBACK_REVIEWS = [
   {
@@ -514,59 +515,74 @@ async function fetchYandexReviews() {
   }
 }
 
-// GET /api/reviews - получить все отзывы
-router.get('/', async (req, res) => {
-  try {
-    // Проверяем кэш
+async function refreshReviewsCache() {
+  if (!ENABLE_REVIEW_SCRAPING) {
+    return reviewsCache || [];
+  }
+
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+
+  refreshInFlight = (async () => {
+    console.log('Refreshing reviews cache in background...');
     const now = Date.now();
-    if (reviewsCache && cacheTimestamp && (now - cacheTimestamp < CACHE_DURATION)) {
-      console.log('Returning cached reviews');
-      return res.json({
-        success: true,
-        data: reviewsCache,
-        total: reviewsCache.length,
-        cached: true
-      });
-    }
-
-    if (!ENABLE_REVIEW_SCRAPING) {
-      return res.json({
-        success: true,
-        data: reviewsCache || FALLBACK_REVIEWS,
-        total: (reviewsCache || FALLBACK_REVIEWS).length,
-        cached: true,
-        source: 'fallback'
-      });
-    }
-
-    console.log('Fetching fresh reviews...');
-
-    // Получаем отзывы параллельно (но это медленно, ~5-10 секунд)
     const withTimeout = (promise, ms) =>
       Promise.race([
         promise,
         new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout_${ms}ms`)), ms))
       ]);
+
     const [googleReviews, yandexReviews] = await Promise.allSettled([
-      withTimeout(fetchGoogleReviews(), 20000),
-      withTimeout(fetchYandexReviews(), 20000)
+      withTimeout(fetchGoogleReviews(), 15000),
+      withTimeout(fetchYandexReviews(), 15000)
     ]);
 
     const normalizedGoogle = googleReviews.status === 'fulfilled' ? googleReviews.value : [];
     const normalizedYandex = yandexReviews.status === 'fulfilled' ? yandexReviews.value : [];
+    const scrapedReviews = [...normalizedGoogle, ...normalizedYandex];
 
-    const allReviews = [...normalizedGoogle, ...normalizedYandex];
-    const effectiveReviews = allReviews.length > 0 ? allReviews : (reviewsCache || FALLBACK_REVIEWS);
+    if (scrapedReviews.length > 0) {
+      reviewsCache = scrapedReviews;
+      cacheTimestamp = now;
+    } else if (!reviewsCache) {
+      reviewsCache = [];
+      cacheTimestamp = now;
+    }
 
-    // Сохраняем в кэш
-    reviewsCache = effectiveReviews;
-    cacheTimestamp = now;
+    return reviewsCache || [];
+  })()
+    .catch((error) => {
+      console.error('Background reviews refresh failed:', error);
+      return reviewsCache || [];
+    })
+    .finally(() => {
+      refreshInFlight = null;
+    });
+
+  return refreshInFlight;
+}
+
+// GET /api/reviews - получить все отзывы
+router.get('/', async (req, res) => {
+  try {
+    const now = Date.now();
+    const hasFreshCache = Boolean(reviewsCache && cacheTimestamp && (now - cacheTimestamp < CACHE_DURATION));
+    const effectiveReviews = reviewsCache || FALLBACK_REVIEWS;
+
+    if (!hasFreshCache && ENABLE_REVIEW_SCRAPING) {
+      refreshReviewsCache().catch((error) => {
+        console.error('Failed to trigger reviews refresh:', error);
+      });
+    }
 
     res.json({
       success: true,
       data: effectiveReviews,
       total: effectiveReviews.length,
-      cached: false
+      cached: Boolean(reviewsCache),
+      stale: !hasFreshCache,
+      source: ENABLE_REVIEW_SCRAPING ? 'cache_or_fallback' : 'fallback'
     });
   } catch (error) {
     console.error('Error in /api/reviews:', error);
