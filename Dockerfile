@@ -1,8 +1,15 @@
 # Backend Dockerfile для Stonerose API
 FROM node:22-alpine
 
-# Устанавливаем curl для health checks
-RUN apk add --no-cache curl
+# Устанавливаем пакеты для health checks и Puppeteer (Chromium)
+RUN apk add --no-cache \
+    curl \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
 
 WORKDIR /app
 

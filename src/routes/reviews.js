@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const puppeteer = require('puppeteer');
+const fs = require('fs');
 
 // Google Place ID для компании
 const GOOGLE_PLACE_ID = 'ChIJHzEQ5jdxxUYRpiADXE1IZ88';
@@ -14,6 +15,24 @@ let cacheTimestamp = null;
 const CACHE_DURATION = 3600000; // 1 час в миллисекундах
 const ENABLE_REVIEW_SCRAPING = process.env.ENABLE_REVIEW_SCRAPING === 'true';
 let refreshInFlight = null;
+const DEFAULT_CHROMIUM_PATHS = ['/usr/bin/chromium-browser', '/usr/bin/chromium'];
+
+function getPuppeteerLaunchOptions() {
+  const configuredPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  const resolvedPath = configuredPath || DEFAULT_CHROMIUM_PATHS.find((p) => fs.existsSync(p));
+  return {
+    headless: 'new',
+    executablePath: resolvedPath || undefined,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-blink-features=AutomationControlled',
+      '--lang=ru-RU'
+    ]
+  };
+}
 
 const FALLBACK_REVIEWS = [
   {
@@ -57,17 +76,7 @@ async function fetchGoogleReviews() {
   try {
     console.log('Starting Google Maps reviews scraping with Puppeteer...');
     
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-blink-features=AutomationControlled',
-        '--lang=ru-RU'
-      ]
-    });
+    browser = await puppeteer.launch(getPuppeteerLaunchOptions());
 
     const page = await browser.newPage();
     
@@ -350,16 +359,7 @@ async function fetchYandexReviews() {
   try {
     console.log('Starting Yandex Maps reviews scraping with Puppeteer...');
     
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--lang=ru-RU'
-      ]
-    });
+    browser = await puppeteer.launch(getPuppeteerLaunchOptions());
 
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
