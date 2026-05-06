@@ -20,7 +20,27 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_KEY }}
           script: |
+            set -euo pipefail
             cd /home/user/backend
-            git pull
+            git pull --ff-only
             docker compose up -d --build
-            docker system prune -f
+            docker compose ps
+
+            # Wait until backend healthcheck is green
+            backend_container_id="$(docker compose ps -q backend)"
+            if [ -n "${backend_container_id}" ]; then
+              for i in $(seq 1 30); do
+                status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}nohealth{{end}}' "${backend_container_id}" || true)"
+                if [ "${status}" = "healthy" ] || [ "${status}" = "nohealth" ]; then
+                  break
+                fi
+                sleep 2
+              done
+            fi
+
+            # Smoke check
+            curl -fsS "http://localhost:3001/health" >/dev/null
+
+            # Lightweight cleanup (avoid system-wide prune on every deploy)
+            docker image prune -f --filter "until=168h" >/dev/null || true
+            docker builder prune -f --filter "until=168h" >/dev/null || true
