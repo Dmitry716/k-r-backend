@@ -1,0 +1,46 @@
+name: Database Backup
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Backup PostgreSQL via SSH
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_KEY }}
+          script: |
+            set -euo pipefail
+            cd /home/user/backend
+
+            if [ ! -f .env ]; then
+              echo ".env not found in /home/user/backend"
+              exit 1
+            fi
+
+            db_name="$(grep '^DB_NAME=' .env | cut -d= -f2-)"
+            if [ -z "${db_name}" ]; then
+              echo "DB_NAME is empty in backend .env"
+              exit 1
+            fi
+
+            backup_dir="/home/user/backups/postgres"
+            mkdir -p "${backup_dir}"
+
+            timestamp="$(date +%F_%H-%M-%S)"
+            backup_file="${backup_dir}/${db_name}_${timestamp}.sql.gz"
+
+            docker compose exec -T db pg_dump -U postgres "${db_name}" | gzip > "${backup_file}"
+
+            # Keep 14 days of backups
+            find "${backup_dir}" -type f -name "*.sql.gz" -mtime +14 -delete
+
+            ls -lh "${backup_dir}" | tail -n 10
+

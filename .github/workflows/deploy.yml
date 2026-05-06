@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: deploy-backend-main
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -24,7 +28,19 @@ jobs:
           script: |
             set -euo pipefail
             cd /home/user/backend
-            git fetch "https://x-access-token:${{ github.token }}@github.com/Dmitry716/k-r-backend.git" main
+
+            # Retry fetch because GitHub API/network can occasionally return transient 5xx
+            for i in $(seq 1 5); do
+              if git fetch "https://x-access-token:${{ github.token }}@github.com/Dmitry716/k-r-backend.git" main; then
+                break
+              fi
+              if [ "$i" -eq 5 ]; then
+                echo "git fetch failed after retries"
+                exit 1
+              fi
+              sleep 3
+            done
+
             git checkout -f main
             git reset --hard FETCH_HEAD
             git clean -fd
