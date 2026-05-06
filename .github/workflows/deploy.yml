@@ -22,10 +22,9 @@ jobs:
           script: |
             set -euo pipefail
             cd /home/user/backend
-            git remote set-url origin git@github.com:Dmitry716/k-r-backend.git
-            git fetch origin main
+            git fetch "https://x-access-token:${{ github.token }}@github.com/Dmitry716/k-r-backend.git" main
             git checkout -f main
-            git reset --hard origin/main
+            git reset --hard FETCH_HEAD
             git clean -fd
             docker compose up -d --build
             docker compose ps
