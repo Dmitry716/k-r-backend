@@ -15,6 +15,9 @@ let cacheTimestamp = null;
 const CACHE_DURATION = 3600000; // 1 час в миллисекундах
 const ENABLE_REVIEW_SCRAPING = process.env.ENABLE_REVIEW_SCRAPING === 'true';
 const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY || '';
+const YM_PERMANENT_ID = process.env.YM_PERMANENT_ID || '';
+const YM_SESSION_ID = process.env.YM_SESSION_ID || '';
+const YM_SESSION_ID2 = process.env.YM_SESSION_ID2 || '';
 let refreshInFlight = null;
 const DEFAULT_CHROMIUM_PATHS = ['/usr/bin/chromium-browser', '/usr/bin/chromium'];
 
@@ -400,6 +403,59 @@ async function fetchGoogleReviewsFromApi() {
   }
 }
 
+async function fetchYandexReviewsFromBusinessApi() {
+  if (!YM_PERMANENT_ID || !YM_SESSION_ID || !YM_SESSION_ID2) {
+    return [];
+  }
+
+  try {
+    const url = new URL(`https://yandex.ru/sprav/api/${YM_PERMANENT_ID}/reviews`);
+    url.searchParams.set('ranking_by', 'by_time');
+    url.searchParams.set('page', '1');
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Accept: 'application/json',
+        Cookie: `Session_id=${YM_SESSION_ID}; sessionid2=${YM_SESSION_ID2}; i=1`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`yandex_business_api_http_${response.status}`);
+    }
+
+    const payload = await response.json();
+    const items = payload?.list?.items;
+    if (!Array.isArray(items)) {
+      return [];
+    }
+
+    return items
+      .filter((item) => item && (item.full_text || item.snippet))
+      .map((item, index) => {
+        const epochSeconds = Number(item.time_created);
+        const isoDate = Number.isFinite(epochSeconds)
+          ? new Date(epochSeconds * 1000).toISOString()
+          : new Date().toISOString();
+        const photos = Array.isArray(item.photos)
+          ? item.photos.map((photo) => photo?.link).filter(Boolean)
+          : [];
+        return {
+          id: `yandex-api-${item.id || index}`,
+          name: item?.author?.user || 'Клиент Яндекс',
+          date: isoDate,
+          rating: Number(item.rating) || 5,
+          text: item.full_text || item.snippet || '',
+          source: 'Яндекс.Карты',
+          avatar: item?.author?.avatar || null,
+          photos
+        };
+      });
+  } catch (error) {
+    console.error('Error fetching Yandex reviews via Business API:', error.message || error);
+    return [];
+  }
+}
+
 /**
  * Получение отзывов с Яндекс.Карт через Puppeteer
  */
@@ -584,9 +640,13 @@ async function refreshReviewsCache() {
       ]);
 
     const googleProvider = GOOGLE_PLACES_API_KEY ? fetchGoogleReviewsFromApi() : fetchGoogleReviews();
+    const yandexProvider =
+      YM_PERMANENT_ID && YM_SESSION_ID && YM_SESSION_ID2
+        ? fetchYandexReviewsFromBusinessApi()
+        : fetchYandexReviews();
     const [googleReviews, yandexReviews] = await Promise.allSettled([
       withTimeout(googleProvider, 15000),
-      withTimeout(fetchYandexReviews(), 15000)
+      withTimeout(yandexProvider, 15000)
     ]);
 
     const normalizedGoogle = googleReviews.status === 'fulfilled' ? googleReviews.value : [];
