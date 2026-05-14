@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { db } = require('../utils/db');
 const { 
   products, 
@@ -61,16 +63,58 @@ const uniqueTables = [
 ];
 
 /**
- * Exclusive monument renders use folder names on disk; DB sometimes stores camelCase
- * that does not match actual directories (404). Align known mismatches.
+ * Exclusive assets: some models use UPPERCASE folders (K10_BALTICGREEN), others camelCase (K4_BalticGreen).
+ * Pick the URL variant that actually exists under FRONTEND_PUBLIC_PATH.
  */
-const fixExclusiveImagePath = (url) => {
-  if (typeof url !== 'string') return url;
-  return url
-    .replace(/K(\d+)_BalticGreen\//g, 'K$1_BALTICGREEN/')
-    .replace(/K(\d+)_Aurora\//g, 'K$1_AURORA/')
-    .replace(/K(\d+)_CuruGray\//g, 'K$1_CURUGRAY/');
-};
+const exclusiveImageResolveCache = new Map();
+const MAX_EXCLUSIVE_IMAGE_CACHE = 5000;
+
+function buildExclusiveImageCandidates(url) {
+  const out = [url];
+  const toggles = [
+    ['_BALTICGREEN/', '_BalticGreen/'],
+    ['_AURORA/', '_Aurora/'],
+    ['_CURUGRAY/', '_CuruGray/'],
+  ];
+  for (const [upperish, camelish] of toggles) {
+    if (url.includes(upperish)) out.push(url.split(upperish).join(camelish));
+    if (url.includes(camelish)) out.push(url.split(camelish).join(upperish));
+  }
+  return [...new Set(out)];
+}
+
+function resolveExclusiveImageUrl(url) {
+  if (typeof url !== 'string' || !url.startsWith('/')) return url;
+
+  const publicRoot = process.env.FRONTEND_PUBLIC_PATH;
+  if (!publicRoot) return url;
+
+  if (exclusiveImageResolveCache.has(url)) {
+    return exclusiveImageResolveCache.get(url);
+  }
+
+  const candidates = buildExclusiveImageCandidates(url);
+  let chosen = url;
+
+  for (const candidate of candidates) {
+    const rel = candidate.replace(/^\/+/, '');
+    const abs = path.join(publicRoot, rel);
+    try {
+      if (fs.existsSync(abs)) {
+        chosen = candidate;
+        break;
+      }
+    } catch {
+      // ignore invalid paths
+    }
+  }
+
+  if (exclusiveImageResolveCache.size >= MAX_EXCLUSIVE_IMAGE_CACHE) {
+    exclusiveImageResolveCache.clear();
+  }
+  exclusiveImageResolveCache.set(url, chosen);
+  return chosen;
+}
 
 /**
  * Parse and normalize monument colors from potential double JSON encoding
@@ -79,7 +123,7 @@ const parseMonumentColors = (monument) => {
   if (!monument) return monument;
 
   if (typeof monument.image === 'string') {
-    monument.image = fixExclusiveImagePath(monument.image);
+    monument.image = resolveExclusiveImageUrl(monument.image);
   }
 
   if (!monument.colors) return monument;
@@ -103,7 +147,7 @@ const parseMonumentColors = (monument) => {
   if (Array.isArray(colors)) {
     monument.colors = colors.map((c) => {
       if (c && typeof c.image === 'string') {
-        return { ...c, image: fixExclusiveImagePath(c.image) };
+        return { ...c, image: resolveExclusiveImageUrl(c.image) };
       }
       return c;
     });
