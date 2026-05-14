@@ -1,76 +1,55 @@
--- Fix case sensitivity issues in exclusive monument image paths
--- This updates paths from mixed case (e.g., K10_Aurora) to uppercase (K10_AURORA)
+-- Align exclusive monument image paths in DB with on-disk folder names.
+-- Only materials where folders are UPPERCASE on CDN/static (verified on prod):
+--   BalticGreen -> BALTICGREEN, Aurora -> AURORA, CuruGray -> CURUGRAY
+-- Do NOT rewrite BluePearl / Pokost here: live assets use mixed case (BluePearl, Pokost).
 
--- Update main image paths
-UPDATE products 
-SET image = 
-    REPLACE(REPLACE(REPLACE(REPLACE(
-        REPLACE(REPLACE(REPLACE(REPLACE(
-            REPLACE(REPLACE(REPLACE(REPLACE(image,
-        'K10_Aurora', 'K10_AURORA'),
-        'K10_BalticGreen', 'K10_BALTICGREEN'),
-        'K10_CuruGray', 'K10_CURUGRAY'),
-        'K10_BluePearl', 'K10_BLUEPEARL'),
-        'K10_Pokost', 'K10_POKOST'),
-        'K11_Aurora', 'K11_AURORA'),
-        'K11_BalticGreen', 'K11_BALTICGREEN'),
-        'K11_BluePearl', 'K11_BLUEPEARL'),
-        'K11_CuruGray', 'K11_CURUGRAY'),
-        'K11_Pokost', 'K11_POKOST'),
-        'K12_Aurora', 'K12_AURORA'),
-        'K12_BalticGreen', 'K12_BALTICGREEN')
-WHERE category = 'Эксклюзивные';
-
--- Update colors JSON array
--- This is more complex as we need to handle JSON strings within the array
--- Using a procedural approach would be better, but this SQL attempts to handle common cases
-
+-- Main product image
 UPDATE products
-SET colors = 
-    REGEXP_REPLACE(colors::text, 'K10_Aurora', 'K10_AURORA', 'g')::jsonb
-WHERE category = 'Эксклюзивные' AND colors::text LIKE '%Aurora%';
+SET image = regexp_replace(
+  regexp_replace(
+    regexp_replace(
+      image,
+      'K([0-9]+)_Aurora/',
+      'K\1_AURORA/',
+      'g'
+    ),
+    'K([0-9]+)_BalticGreen/',
+    'K\1_BALTICGREEN/',
+    'g'
+  ),
+  'K([0-9]+)_CuruGray/',
+  'K\1_CURUGRAY/',
+  'g'
+)
+WHERE category = 'Эксклюзивные'
+  AND (
+    image LIKE '%_Aurora/%'
+    OR image LIKE '%_BalticGreen/%'
+    OR image LIKE '%_CuruGray/%'
+  );
 
+-- colors JSON (string round-trip keeps valid jsonb)
 UPDATE products
-SET colors = 
-    REGEXP_REPLACE(colors::text, 'K10_BalticGreen', 'K10_BALTICGREEN', 'g')::jsonb
-WHERE category = 'Эксклюзивные' AND colors::text LIKE '%BalticGreen%';
-
-UPDATE products
-SET colors = 
-    REGEXP_REPLACE(colors::text, 'K10_CuruGray', 'K10_CURUGRAY', 'g')::jsonb
-WHERE category = 'Эксклюзивные' AND colors::text LIKE '%CuruGray%';
-
-UPDATE products
-SET colors = 
-    REGEXP_REPLACE(colors::text, 'K10_BluePearl', 'K10_BLUEPEARL', 'g')::jsonb
-WHERE category = 'Эксклюзивные' AND colors::text LIKE '%BluePearl%';
-
-UPDATE products
-SET colors = 
-    REGEXP_REPLACE(colors::text, 'K10_Pokost', 'K10_POKOST', 'g')::jsonb
-WHERE category = 'Эксклюзивные' AND colors::text LIKE '%Pokost%';
-
-UPDATE products
-SET colors = 
-    REGEXP_REPLACE(colors::text, 'K([0-9]+)_Aurora', 'K\1_AURORA', 'g')::jsonb
-WHERE category = 'Эксклюзивные' AND colors::text LIKE '%Aurora%';
-
-UPDATE products
-SET colors = 
-    REGEXP_REPLACE(colors::text, 'K([0-9]+)_BalticGreen', 'K\1_BALTICGREEN', 'g')::jsonb
-WHERE category = 'Эксклюзивные' AND colors::text LIKE '%BalticGreen%';
-
-UPDATE products
-SET colors = 
-    REGEXP_REPLACE(colors::text, 'K([0-9]+)_CuruGray', 'K\1_CURUGRAY', 'g')::jsonb
-WHERE category = 'Эксклюзивные' AND colors::text LIKE '%CuruGray%';
-
-UPDATE products
-SET colors = 
-    REGEXP_REPLACE(colors::text, 'K([0-9]+)_BluePearl', 'K\1_BLUEPEARL', 'g')::jsonb
-WHERE category = 'Эксклюзивные' AND colors::text LIKE '%BluePearl%';
-
-UPDATE products
-SET colors = 
-    REGEXP_REPLACE(colors::text, 'K([0-9]+)_Pokost', 'K\1_POKOST', 'g')::jsonb
-WHERE category = 'Эксклюзивные' AND colors::text LIKE '%Pokost%';
+SET colors = regexp_replace(
+  regexp_replace(
+    regexp_replace(
+      colors::text,
+      'K([0-9]+)_Aurora',
+      'K\1_AURORA',
+      'g'
+    ),
+    'K([0-9]+)_BalticGreen',
+    'K\1_BALTICGREEN',
+    'g'
+  ),
+  'K([0-9]+)_CuruGray',
+  'K\1_CURUGRAY',
+  'g'
+)::jsonb
+WHERE category = 'Эксклюзивные'
+  AND colors::text IS NOT NULL
+  AND (
+    colors::text LIKE '%_Aurora%'
+    OR colors::text LIKE '%_BalticGreen%'
+    OR colors::text LIKE '%_CuruGray%'
+  );
