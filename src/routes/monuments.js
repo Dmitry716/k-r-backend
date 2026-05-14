@@ -61,13 +61,31 @@ const uniqueTables = [
 ];
 
 /**
+ * Exclusive monument renders use folder names on disk; DB sometimes stores camelCase
+ * that does not match actual directories (404). Align known mismatches.
+ */
+const fixExclusiveImagePath = (url) => {
+  if (typeof url !== 'string') return url;
+  return url
+    .replace(/K(\d+)_BalticGreen\//g, 'K$1_BALTICGREEN/')
+    .replace(/K(\d+)_Aurora\//g, 'K$1_AURORA/')
+    .replace(/K(\d+)_CuruGray\//g, 'K$1_CURUGRAY/');
+};
+
+/**
  * Parse and normalize monument colors from potential double JSON encoding
  */
 const parseMonumentColors = (monument) => {
-  if (!monument || !monument.colors) return monument;
+  if (!monument) return monument;
+
+  if (typeof monument.image === 'string') {
+    monument.image = fixExclusiveImagePath(monument.image);
+  }
+
+  if (!monument.colors) return monument;
 
   let colors = monument.colors;
-  
+
   // Handle potential double JSON encoding
   if (typeof colors === 'string') {
     try {
@@ -81,9 +99,14 @@ const parseMonumentColors = (monument) => {
       return monument;
     }
   }
-  
+
   if (Array.isArray(colors)) {
-    monument.colors = colors;
+    monument.colors = colors.map((c) => {
+      if (c && typeof c.image === 'string') {
+        return { ...c, image: fixExclusiveImagePath(c.image) };
+      }
+      return c;
+    });
   }
 
   return monument;
