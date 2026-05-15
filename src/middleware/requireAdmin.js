@@ -1,11 +1,12 @@
 const jwt = require('jsonwebtoken');
+const { getAuthToken } = require('../utils/auth-token');
 
 /**
- * Requires valid admin JWT in Authorization: Bearer header.
+ * Requires valid admin JWT (Bearer header or httpOnly cookie).
  */
 function requireAdmin(req, res, next) {
   try {
-    const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+    const token = getAuthToken(req);
     if (!token) {
       return res.status(401).json({ success: false, message: 'Требуется токен' });
     }

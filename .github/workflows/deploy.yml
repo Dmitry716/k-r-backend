@@ -60,7 +60,7 @@ jobs:
             fi
 
             # Smoke check
-            curl -fsS "http://localhost:3001/api/health" >/dev/null
+            curl -fsS "http://localhost:3001/health" >/dev/null || curl -fsS "http://localhost:3001/api/health" >/dev/null
 
             # Lightweight cleanup (avoid system-wide prune on every deploy)
             docker image prune -f --filter "until=168h" >/dev/null || true

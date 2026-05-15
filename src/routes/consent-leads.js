@@ -1,5 +1,6 @@
 const express = require('express');
 const { appendConsentLog } = require('../utils/pd-journal');
+const { verifyRecaptcha } = require('../utils/recaptcha');
 
 const router = express.Router();
 
@@ -46,7 +47,16 @@ router.post('/', async (req, res) => {
       consentVersion,
       policyUrl,
       product,
+      recaptchaToken,
     } = req.body || {};
+
+    const captcha = await verifyRecaptcha(recaptchaToken);
+    if (!captcha.ok) {
+      return res.status(400).json({
+        error: 'reCAPTCHA verification failed',
+        code: captcha.reason,
+      });
+    }
 
     if (!phone || typeof phone !== 'string') {
       return res.status(400).json({ error: 'Phone is required' });

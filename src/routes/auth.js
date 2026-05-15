@@ -1,7 +1,8 @@
 const express = require('express');
-const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { Client } = require('pg');
+const { hashPassword, verifyPassword, isBcryptHash } = require('../utils/password');
+const { getAuthToken, setAuthCookie, clearAuthCookie } = require('../utils/auth-token');
 
 const router = express.Router();
 
@@ -24,14 +25,6 @@ async function initDb() {
     }
   }
   return client;
-}
-
-// Функция для хэширования пароля
-function hashPassword(password) {
-  return crypto
-    .createHash('sha256')
-    .update(password)
-    .digest('hex');
 }
 
 // Генерация JWT токена
@@ -81,30 +74,31 @@ router.post('/login', async (req, res) => {
 
     const user = result.rows[0];
 
-    // Проверяем пароль
-    const hashedPassword = hashPassword(password);
-    if (user.password !== hashedPassword) {
+    const passwordOk = await verifyPassword(password, user.password);
+    if (!passwordOk) {
       return res.status(401).json({
         success: false,
         message: 'Неверный email или пароль',
       });
     }
 
-    // Обновляем last_login
+    if (!isBcryptHash(user.password)) {
+      const upgraded = await hashPassword(password);
+      await db.query('UPDATE users SET password = $1 WHERE id = $2', [upgraded, user.id]);
+    }
+
     await db.query(
       'UPDATE users SET last_login = NOW() WHERE id = $1',
       [user.id]
     );
 
-    // Генерируем токен
     const token = generateToken(user);
+    setAuthCookie(res, token);
 
-    // Возвращаем успешный ответ
     res.json({
       success: true,
       message: 'Вход выполнен успешно',
       data: {
-        token,
         user: {
           id: user.id,
           username: user.username,
@@ -127,7 +121,7 @@ router.post('/login', async (req, res) => {
  * Выход администратора
  */
 router.post('/logout', (req, res) => {
-  // На фронте просто удалятся localStorage
+  clearAuthCookie(res);
   res.json({
     success: true,
     message: 'Вы вышли из системы',
@@ -140,7 +134,7 @@ router.post('/logout', (req, res) => {
  */
 router.get('/me', async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const token = getAuthToken(req);
 
     if (!token) {
       return res.status(401).json({
@@ -149,10 +143,7 @@ router.get('/me', async (req, res) => {
       });
     }
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const db = await initDb();
     if (!db) {
@@ -194,7 +185,7 @@ router.get('/me', async (req, res) => {
 router.post('/change-password', async (req, res) => {
   try {
     const { currentPassword, newPassword, confirmPassword } = req.body;
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const token = getAuthToken(req);
 
     // Валидация входных данных
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -271,17 +262,15 @@ router.post('/change-password', async (req, res) => {
 
     const user = userResult.rows[0];
 
-    // Проверяем текущий пароль
-    const hashedCurrentPassword = hashPassword(currentPassword);
-    if (user.password !== hashedCurrentPassword) {
+    const currentOk = await verifyPassword(currentPassword, user.password);
+    if (!currentOk) {
       return res.status(401).json({
         success: false,
         message: 'Текущий пароль введён неправильно',
       });
     }
 
-    // Обновляем пароль
-    const newHashedPassword = hashPassword(newPassword);
+    const newHashedPassword = await hashPassword(newPassword);
     await db.query(
       'UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2',
       [newHashedPassword, user.id]

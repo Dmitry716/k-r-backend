@@ -2,8 +2,22 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 require('dotenv').config();
+
+if (process.env.SENTRY_DSN) {
+  try {
+    const Sentry = require('@sentry/node');
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV || 'production',
+      tracesSampleRate: 0.1,
+    });
+  } catch (err) {
+    console.warn('Sentry init skipped:', err.message);
+  }
+}
 
 // Routes
 const monumentsRoutes = require('./routes/monuments');
@@ -101,8 +115,21 @@ app.use(cors({
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
 
 app.use(requestLogger);
+
+function healthHandler(req, res) {
+  res.json({
+    status: 'OK',
+    service: 'k-r-backend',
+    timestamp: new Date().toISOString(),
+    uptimeSec: Math.floor(process.uptime()),
+  });
+}
+
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // Static files for uploaded images
 app.use('/uploads', express.static('uploads'));
@@ -155,20 +182,6 @@ app.use('/api/seo-hierarchy', seoHierarchyRoutes);
 
 // File upload endpoint (admin only)
 app.use('/api/upload', requireAdmin, uploadRoutes);
-app.use('/api', requireAdmin, adminFilesRoutes);
-
-function healthHandler(req, res) {
-  res.json({
-    status: 'OK',
-    service: 'k-r-backend',
-    timestamp: new Date().toISOString(),
-    uptimeSec: Math.floor(process.uptime()),
-  });
-}
-
-// Health check endpoints
-app.get('/health', healthHandler);
-app.get('/api/health', healthHandler);
 
 // 404 handler
 app.use('*', (req, res) => {
