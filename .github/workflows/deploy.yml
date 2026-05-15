@@ -44,7 +44,10 @@ jobs:
             git checkout -f main
             git reset --hard FETCH_HEAD
             git clean -fd
-            docker compose up -d --build
+            docker compose build backend
+            # Refresh node_modules volume (bind mount + anonymous volume can hide new deps from image)
+            docker compose run --rm --no-deps backend npm ci --omit=dev
+            docker compose up -d --force-recreate backend
             docker compose ps
 
             # Wait until backend healthcheck is green
