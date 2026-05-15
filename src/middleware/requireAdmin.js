@@ -11,7 +11,8 @@ function requireAdmin(req, res, next) {
       return res.status(401).json({ success: false, message: 'Требуется токен' });
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.role !== 'admin') {
+    const allowedRoles = ['admin', 'superadmin'];
+    if (!allowedRoles.includes(decoded.role)) {
       return res.status(403).json({ success: false, message: 'Недостаточно прав' });
     }
     req.admin = decoded;
