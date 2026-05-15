@@ -19,10 +19,12 @@ jobs:
           set -euo pipefail
 
           SITE_URL="https://k-r.by"
+          FRONTEND_HEALTH_URL="https://k-r.by/health"
           API_HEALTH_URL="https://k-r.by/api/health"
           API_MONUMENTS_URL="https://k-r.by/api/monuments?limit=1"
 
           site_code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "$SITE_URL" || echo "000")"
+          frontend_health_code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "$FRONTEND_HEALTH_URL" || echo "000")"
           api_health_code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "$API_HEALTH_URL" || echo "000")"
           monuments_code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "$API_MONUMENTS_URL" || echo "000")"
 
@@ -36,6 +38,10 @@ jobs:
           if [ "$site_code" != "200" ]; then
             failed="true"
             reason="${reason} site=$site_code;"
+          fi
+          if [ "$frontend_health_code" != "200" ]; then
+            failed="true"
+            reason="${reason} frontend_health=$frontend_health_code;"
           fi
           if [ "$api_health_code" != "200" ]; then
             failed="true"
@@ -51,6 +57,7 @@ jobs:
           fi
 
           echo "site_code=$site_code" >> "$GITHUB_OUTPUT"
+          echo "frontend_health_code=$frontend_health_code" >> "$GITHUB_OUTPUT"
           echo "api_health_code=$api_health_code" >> "$GITHUB_OUTPUT"
           echo "monuments_code=$monuments_code" >> "$GITHUB_OUTPUT"
           echo "ssl_days_left=$days_left" >> "$GITHUB_OUTPUT"
@@ -64,6 +71,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SITE_CODE: ${{ steps.checks.outputs.site_code }}
+          FRONTEND_HEALTH_CODE: ${{ steps.checks.outputs.frontend_health_code }}
           API_HEALTH_CODE: ${{ steps.checks.outputs.api_health_code }}
           MONUMENTS_CODE: ${{ steps.checks.outputs.monuments_code }}
           SSL_DAYS_LEFT: ${{ steps.checks.outputs.ssl_days_left }}
@@ -76,6 +84,7 @@ jobs:
           fi
           msg="🚨 k-r.by monitoring alert%0A"
           msg="${msg}Site: ${SITE_CODE}%0A"
+          msg="${msg}Frontend health: ${FRONTEND_HEALTH_CODE}%0A"
           msg="${msg}API health: ${API_HEALTH_CODE}%0A"
           msg="${msg}Monuments: ${MONUMENTS_CODE}%0A"
           msg="${msg}SSL days left: ${SSL_DAYS_LEFT}%0A"

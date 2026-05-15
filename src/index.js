@@ -22,6 +22,8 @@ const reviewsRoutes = require('./routes/reviews');
 const consentLeadsRoutes = require('./routes/consent-leads');
 const adminPdRoutes = require('./routes/admin-pd');
 const { startConsentRetentionScheduler } = require('./jobs/consent-retention');
+const { requireAdmin } = require('./middleware/requireAdmin');
+const { requestLogger } = require('./middleware/requestLogger');
 
 // Admin routes
 const adminMonumentsRoutes = require('./routes/admin-monuments');
@@ -64,6 +66,24 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
+const authLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { success: false, message: 'Слишком много попыток входа. Попробуйте позже.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth/login', authLoginLimiter);
+
+const consentLeadsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { success: false, message: 'Слишком много заявок с этого IP.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/consent-leads', consentLeadsLimiter);
+
 // CORS configuration
 const allowedOrigins = process.env.ORIGIN_URLS.split(',');
 
@@ -81,6 +101,8 @@ app.use(cors({
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+app.use(requestLogger);
 
 // Static files for uploaded images
 app.use('/uploads', express.static('uploads'));
@@ -112,31 +134,36 @@ app.use('/api/auth', authRoutes);
 app.use('/api/consent-leads', consentLeadsRoutes);
 app.use('/api/admin/pd', adminPdRoutes);
 
-// Admin API Routes
-app.use('/api/admin/monuments', adminMonumentsRoutes);
-app.use('/api/admin/works', adminWorksRoutes);
-app.use('/api/admin/fences', adminFencesRoutes);
-app.use('/api/admin/accessories', adminAccessoriesRoutes);
-app.use('/api/admin/landscape', adminLandscapeRoutes);
-app.use('/api/admin/blogs', adminBlogsRoutes);
-app.use('/api/admin/campaigns', adminCampaignsRoutes);
-app.use('/api/admin/epitaphs', adminEpitaphsRoutes);
-app.use('/api/admin/page-descriptions', adminPageDescriptionsRoutes);
-app.use('/api/admin/page-seo', adminPageSeoRoutes);
-app.use('/api/admin/seo-templates', adminSeoTemplatesRoutes);
-app.use('/api/admin/bulk-seo', adminBulkSeoRoutes); // Массовое обновление SEO
-app.use('/api/admin', adminSeoFieldsRoutes); // Маршруты для SEO полей сущностей
-app.use('/api/admin', adminFilesRoutes);
+// Admin API Routes (JWT required)
+app.use('/api/admin/monuments', requireAdmin, adminMonumentsRoutes);
+app.use('/api/admin/works', requireAdmin, adminWorksRoutes);
+app.use('/api/admin/fences', requireAdmin, adminFencesRoutes);
+app.use('/api/admin/accessories', requireAdmin, adminAccessoriesRoutes);
+app.use('/api/admin/landscape', requireAdmin, adminLandscapeRoutes);
+app.use('/api/admin/blogs', requireAdmin, adminBlogsRoutes);
+app.use('/api/admin/campaigns', requireAdmin, adminCampaignsRoutes);
+app.use('/api/admin/epitaphs', requireAdmin, adminEpitaphsRoutes);
+app.use('/api/admin/page-descriptions', requireAdmin, adminPageDescriptionsRoutes);
+app.use('/api/admin/page-seo', requireAdmin, adminPageSeoRoutes);
+app.use('/api/admin/seo-templates', requireAdmin, adminSeoTemplatesRoutes);
+app.use('/api/admin/bulk-seo', requireAdmin, adminBulkSeoRoutes);
+app.use('/api/admin', requireAdmin, adminSeoFieldsRoutes);
+app.use('/api/admin', requireAdmin, adminFilesRoutes);
 
 // SEO Hierarchy endpoint (для получения применённого SEO с шаблонами)
 app.use('/api/seo-hierarchy', seoHierarchyRoutes);
 
-// File upload endpoint (общий для всех)
-app.use('/api/upload', uploadRoutes);
-app.use('/api', adminFilesRoutes);
+// File upload endpoint (admin only)
+app.use('/api/upload', requireAdmin, uploadRoutes);
+app.use('/api', requireAdmin, adminFilesRoutes);
 
 function healthHandler(req, res) {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'OK',
+    service: 'k-r-backend',
+    timestamp: new Date().toISOString(),
+    uptimeSec: Math.floor(process.uptime()),
+  });
 }
 
 // Health check endpoints

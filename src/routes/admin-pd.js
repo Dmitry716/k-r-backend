@@ -1,5 +1,5 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
+const { requireAdmin } = require('../middleware/requireAdmin');
 const {
   CONSENT_LOG_FILE,
   readJsonLines,
@@ -31,23 +31,6 @@ function getRequesterIp(req) {
     return forwarded.split(',')[0].trim();
   }
   return req.ip || req.connection?.remoteAddress || 'unknown';
-}
-
-function requireAdmin(req, res, next) {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({ success: false, message: 'Требуется токен' });
-    }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Недостаточно прав' });
-    }
-    req.admin = decoded;
-    return next();
-  } catch {
-    return res.status(401).json({ success: false, message: 'Невалидный токен' });
-  }
 }
 
 router.get('/export', requireAdmin, (req, res) => {

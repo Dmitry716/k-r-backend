@@ -2,7 +2,11 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const { requireAdmin } = require('../middleware/requireAdmin');
+
 const router = express.Router();
+
+router.use(requireAdmin);
 
 // Простая настройка multer - как в оригинале
 const upload = multer({ 
