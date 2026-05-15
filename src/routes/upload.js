@@ -74,9 +74,16 @@ router.post('/', upload.single('file'), async (req, res) => {
     });
   } catch (error) {
     console.error('Error uploading file:', error);
+    const isReadonly =
+      error && typeof error === 'object' && 'code' in error && error.code === 'EROFS';
     res.status(500).json({
       success: false,
-      error: "Failed to upload file"
+      error: isReadonly
+        ? 'Upload path is read-only (check FRONTEND_PUBLIC_PATH mount)'
+        : 'Failed to upload file',
+      ...(process.env.NODE_ENV !== 'production' && error instanceof Error
+        ? { details: error.message }
+        : {}),
     });
   }
 });

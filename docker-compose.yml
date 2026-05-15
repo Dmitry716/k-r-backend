@@ -35,7 +35,8 @@ services:
       - ./uploads:/app/uploads
       - ./logs:/app/logs
       - /app/node_modules
-      - /home/user/frontend/public:/home/user/frontend/public:ro
+      # rw required: admin upload writes images into frontend/public/{folder}
+      - /home/user/frontend/public:/home/user/frontend/public
 
   db:
     image: postgres:18-alpine
