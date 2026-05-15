@@ -59,8 +59,21 @@ jobs:
               done
             fi
 
-            # Smoke check
-            curl -fsS "http://localhost:3001/health" >/dev/null || curl -fsS "http://localhost:3001/api/health" >/dev/null
+            # Smoke check (backend may need time to bind after container start)
+            for i in $(seq 1 40); do
+              if curl -fsS "http://localhost:3001/health" >/dev/null 2>&1; then
+                break
+              fi
+              if curl -fsS "http://localhost:3001/api/health" >/dev/null 2>&1; then
+                break
+              fi
+              if [ "$i" -eq 40 ]; then
+                echo "Backend health check failed after retries"
+                docker compose logs --tail=80 backend || true
+                exit 1
+              fi
+              sleep 3
+            done
 
             # Lightweight cleanup (avoid system-wide prune on every deploy)
             docker image prune -f --filter "until=168h" >/dev/null || true
