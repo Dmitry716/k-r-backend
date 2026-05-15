@@ -1,7 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { Client } = require('pg');
-const { hashPassword, verifyPassword, isBcryptHash } = require('../utils/password');
+const { hashPassword, verifyPassword, isScryptHash } = require('../utils/password');
 const { getAuthToken, setAuthCookie, clearAuthCookie } = require('../utils/auth-token');
 
 const router = express.Router();
@@ -82,7 +82,7 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    if (!isBcryptHash(user.password)) {
+    if (!isScryptHash(user.password) && !String(user.password).startsWith('$2')) {
       const upgraded = await hashPassword(password);
       await db.query('UPDATE users SET password = $1 WHERE id = $2', [upgraded, user.id]);
     }
