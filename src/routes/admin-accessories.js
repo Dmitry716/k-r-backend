@@ -88,7 +88,19 @@ router.post('/', async (req, res) => {
     res.status(201).json({ success: true, accessory: result[0] });
   } catch (error) {
     console.error('Ошибка создания аксессуара через админку:', error);
-    res.status(500).json({ success: false, error: 'Не удалось создать аксессуар' });
+    if (error?.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        error: 'Товар с таким URL (slug) уже существует. Измените название или поле slug.',
+      });
+    }
+    res.status(500).json({
+      success: false,
+      error: 'Не удалось создать аксессуар',
+      ...(process.env.NODE_ENV !== 'production' && error?.message
+        ? { details: error.message }
+        : {}),
+    });
   }
 });
 
