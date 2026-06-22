@@ -9,6 +9,8 @@
     "build": "echo 'No build process needed for pure Node.js'",
     "migrate": "node src/scripts/migrate.js",
     "seed": "node src/scripts/seed.js",
+    "seed:seo": "node scripts/seed-page-seo-vitebsk.js",
+    "seed:seo:force": "node scripts/seed-page-seo-vitebsk.js --force",
     "setup": "npm run migrate && npm run seed",
     "export-data": "node src/scripts/export-data.js",
     "import-data": "node src/scripts/import-data.js",
